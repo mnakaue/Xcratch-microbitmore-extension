@@ -88,6 +88,12 @@ class GroveShieldWrapperBlocks {
       showStatusButton: true,
       blocks: [
         {
+          opcode: 'whenConnected',
+          blockType: 'hat',
+          isEdgeActivated: true,
+          text: 'micro:bit につながったとき'
+        },
+        {
           opcode: 'isConnected',
           blockType: 'boolean',
           text: 'micro:bit がつながっている'
@@ -103,6 +109,19 @@ class GroveShieldWrapperBlocks {
           text: '接続デバッグを消す'
         },
         '---',
+        {
+          opcode: 'whenButtonPressed',
+          blockType: 'hat',
+          isEdgeActivated: true,
+          text: 'Grove ボタン [PORT] が押されたとき',
+          arguments: {
+            PORT: {
+              type: 'string',
+              menu: 'digitalPorts',
+              defaultValue: 'P0'
+            }
+          }
+        },
         {
           opcode: 'buttonPressed',
           blockType: 'boolean',
@@ -209,6 +228,10 @@ class GroveShieldWrapperBlocks {
     return Boolean(this._peripheral && this._peripheral.isConnected());
   }
 
+  whenConnected() {
+    return this.isConnected();
+  }
+
   getConnectionDebugInfo() {
     return this.lastDebugMessage || 'debug-empty';
   }
@@ -238,6 +261,10 @@ class GroveShieldWrapperBlocks {
     return this.base.isPinHigh({
       PIN: toPortPin(DIGITAL_PORTS, args.PORT)
     });
+  }
+
+  whenButtonPressed(args) {
+    return this.buttonPressed(args);
   }
 
   setLed(args) {
