@@ -84,7 +84,7 @@ class GroveShieldWrapperBlocks {
       P1: DEFAULT_SERVO_ANGLE,
       P2: DEFAULT_SERVO_ANGLE
     };
-    this.#configureLedButtonEvents();
+    this.ledButtonEventListening = {};
     if (DEBUG_ENABLED) {
       this.#installDebugHooks();
       this.#logDebug('constructor', this.#debugSnapshot());
@@ -289,8 +289,23 @@ class GroveShieldWrapperBlocks {
     return this._peripheral.disconnect();
   }
 
-  whenLedButtonPressed(args) {
+  whenLedButtonPressed(args, util) {
     const port = DUAL_SIGNAL_PORTS[String(args.PORT)] || DUAL_SIGNAL_PORTS.P0;
+    if (!this.isConnected()) {
+      this.ledButtonEventListening = {};
+      return false;
+    }
+    if (!this.ledButtonEventListening[port.button]) {
+      const resultPromise = this.base.listenPinEventType({
+        EVENT_TYPE: 'ON_EDGE',
+        PIN: port.button
+      }, util);
+      if (!resultPromise) return;
+      return resultPromise.then(() => {
+        this.ledButtonEventListening[port.button] = true;
+        return false;
+      });
+    }
     return this.base.whenPinEvent({
       EVENT: 'FALL',
       PIN: port.button
@@ -354,15 +369,6 @@ class GroveShieldWrapperBlocks {
       ANGLE: angle,
       RANGE: SERVO_RANGE,
       CENTER: SERVO_CENTER
-    });
-  }
-
-  #configureLedButtonEvents() {
-    Object.values(DUAL_SIGNAL_PORTS).forEach(({button}) => {
-      this.base.listenPinEventType({
-        EVENT_TYPE: 'ON_EDGE',
-        PIN: button
-      });
     });
   }
 
