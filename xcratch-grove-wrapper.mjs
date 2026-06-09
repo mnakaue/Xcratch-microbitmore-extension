@@ -6,13 +6,35 @@ import {
 const EXTENSION_ID = 'groveShieldWrapper';
 const EXTENSION_NAME = 'Grove Wrapper';
 const EXTENSION_DESCRIPTION = 'Grove Shield for micro:bit 向けの分かりやすいラッパー';
+const MICROBIT_MORE_OPCODES = new Set([
+  'whenConnectionChanged',
+  'whenButtonEvent',
+  'isButtonPressed',
+  'whenTouchEvent',
+  'isPinTouched',
+  'whenGesture',
+  'displayMatrix',
+  'displayText',
+  'displayClear',
+  'getLightLevel',
+  'getTemperature',
+  'getCompassHeading',
+  'getPitch',
+  'getRoll',
+  'getSoundLevel',
+  'getMagneticForce',
+  'getAcceleration',
+  'playTone',
+  'stopTone'
+]);
 
 let extensionURL = import.meta.url;
 const extensionQuery = new URL(extensionURL).searchParams;
 const DEBUG_ENABLED = extensionQuery.get('v') === 'debug';
 
 const iconURL = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' rx='18' fill='%233e8b52'/%3E%3Crect x='14' y='20' width='52' height='40' rx='8' fill='%23f8f3e8'/%3E%3Ccircle cx='28' cy='40' r='6' fill='%23d97a2b'/%3E%3Ccircle cx='52' cy='40' r='6' fill='%232e6ccf'/%3E%3Cpath d='M20 14v12M32 14v12M44 14v12M56 14v12' stroke='%23f8f3e8' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E";
-const menuIconURI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAASklEQVR42mNgoAeQWVb6nxZ44C24cXYLSewRZMH3zy/AGKSZFPbgs4BUPEItuFmlDcfI4no55+F4hFswmooGxoLhU+GMWkCXFgsAwpEtR+p0groAAAAASUVORK5CYII=';
+const microbitMoreIconURI = microbitMoreEntry.insetIconURL || microbitMoreEntry.iconURL || iconURL;
+const menuIconURI = microbitMoreEntry.iconURL || microbitMoreIconURI;
 
 const DIGITAL_PORTS = {
   P0: '0',
@@ -53,9 +75,9 @@ const entry = {
   extensionId: EXTENSION_ID,
   extensionURL,
   collaborator: 'mnakaue',
-  iconURL,
+  iconURL: menuIconURI,
   menuIconURL: menuIconURI,
-  insetIconURL: iconURL,
+  insetIconURL: microbitMoreIconURI,
   description: EXTENSION_DESCRIPTION,
   tags: ['microbit', 'grove'],
   featured: false,
@@ -92,12 +114,8 @@ class GroveShieldWrapperBlocks {
   }
 
   getInfo() {
+    const baseInfo = this.base.getInfo();
     const blocks = [
-      {
-        opcode: 'whenConnected',
-        blockType: 'hat',
-        text: 'micro:bit につながったとき'
-      },
       {
         opcode: 'isConnected',
         blockType: 'Boolean',
@@ -195,6 +213,25 @@ class GroveShieldWrapperBlocks {
       }
     ];
 
+    const microbitMoreBlocks = [];
+    let pendingSeparator = false;
+    baseInfo.blocks.forEach(block => {
+      if (block === '---') {
+        if (microbitMoreBlocks.length > 0) {
+          pendingSeparator = true;
+        }
+        return;
+      }
+      if (!MICROBIT_MORE_OPCODES.has(block.opcode)) {
+        return;
+      }
+      if (pendingSeparator && microbitMoreBlocks.length > 0) {
+        microbitMoreBlocks.push('---');
+      }
+      pendingSeparator = false;
+      microbitMoreBlocks.push(block);
+    });
+
     if (DEBUG_ENABLED) {
       blocks.splice(2, 0,
         {
@@ -215,10 +252,11 @@ class GroveShieldWrapperBlocks {
       name: EXTENSION_NAME,
       extensionURL,
       menuIconURI,
-      blockIconURI: iconURL,
+      blockIconURI: microbitMoreIconURI,
       showStatusButton: true,
-      blocks,
+      blocks: [...microbitMoreBlocks, '---', ...blocks],
       menus: {
+        ...baseInfo.menus,
         digitalPorts: {
           acceptReporters: false,
           items: ['P0', 'P1', 'P2']
@@ -248,6 +286,10 @@ class GroveShieldWrapperBlocks {
 
   isConnected() {
     return Boolean(this._peripheral && this._peripheral.isConnected());
+  }
+
+  whenConnectionChanged(args) {
+    return this.base.whenConnectionChanged(args);
   }
 
   whenConnected() {
@@ -291,6 +333,26 @@ class GroveShieldWrapperBlocks {
     return this.ledButtonPressed(args);
   }
 
+  whenButtonEvent(args) {
+    return this.base.whenButtonEvent(args);
+  }
+
+  isButtonPressed(args) {
+    return this.base.isButtonPressed(args);
+  }
+
+  whenTouchEvent(args, util) {
+    return this.base.whenTouchEvent(args, util);
+  }
+
+  isPinTouched(args, util) {
+    return this.base.isPinTouched(args, util);
+  }
+
+  whenGesture(args) {
+    return this.base.whenGesture(args);
+  }
+
   ledButtonPressed(args) {
     const port = DUAL_SIGNAL_PORTS[String(args.PORT)] || DUAL_SIGNAL_PORTS.P0;
     return !this.base.isPinHigh({PIN: port.button});
@@ -308,6 +370,50 @@ class GroveShieldWrapperBlocks {
     return this.base.getAnalogValue({
       PIN: toPortPin(ANALOG_PORTS, args.PORT)
     });
+  }
+
+  displayMatrix(args, util) {
+    return this.base.displayMatrix(args, util);
+  }
+
+  displayText(args, util) {
+    return this.base.displayText(args, util);
+  }
+
+  displayClear() {
+    return this.base.displayClear();
+  }
+
+  getLightLevel() {
+    return this.base.getLightLevel();
+  }
+
+  getTemperature() {
+    return this.base.getTemperature();
+  }
+
+  getCompassHeading() {
+    return this.base.getCompassHeading();
+  }
+
+  getPitch() {
+    return this.base.getPitch();
+  }
+
+  getRoll() {
+    return this.base.getRoll();
+  }
+
+  getSoundLevel() {
+    return this.base.getSoundLevel();
+  }
+
+  getMagneticForce(args) {
+    return this.base.getMagneticForce(args);
+  }
+
+  getAcceleration(args) {
+    return this.base.getAcceleration(args);
   }
 
   setServoAngle(args) {
@@ -340,6 +446,14 @@ class GroveShieldWrapperBlocks {
         await sleep(durationMs / steps);
       }
     }
+  }
+
+  playTone(args, util) {
+    return this.base.playTone(args, util);
+  }
+
+  stopTone() {
+    return this.base.stopTone();
   }
 
   #setServo(port, angle) {
