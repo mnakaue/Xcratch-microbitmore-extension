@@ -355,15 +355,15 @@ class GroveShieldWrapperBlocks {
 
   ledButtonPressed(args) {
     const port = DUAL_SIGNAL_PORTS[String(args.PORT)] || DUAL_SIGNAL_PORTS.P0;
-    return !this.base.isPinHigh({PIN: port.button});
+    return this.base.isPinHigh({PIN: port.button});
   }
 
-  setLedButtonLed(args) {
+  setLedButtonLed(args, util) {
     const port = DUAL_SIGNAL_PORTS[String(args.PORT)] || DUAL_SIGNAL_PORTS.P0;
     return this.base.setDigitalOut({
       PIN: port.led,
       LEVEL: String(args.STATE) === 'true' ? 'true' : 'false'
-    });
+    }, util);
   }
 
   readAnalog(args) {
@@ -416,14 +416,14 @@ class GroveShieldWrapperBlocks {
     return this.base.getAcceleration(args);
   }
 
-  setServoAngle(args) {
+  setServoAngle(args, util) {
     const port = String(args.PORT);
     const angle = clampAngle(Number(args.ANGLE) || 0);
     this.servoAngles[port] = angle;
-    return this.#setServo(port, angle);
+    return this.#setServo(port, angle, util);
   }
 
-  async moveServoAngle(args) {
+  async moveServoAngle(args, util) {
     const port = String(args.PORT);
     const targetAngle = clampAngle(Number(args.ANGLE) || 0);
     const seconds = Math.max(0, Number(args.SECONDS) || 0);
@@ -431,7 +431,7 @@ class GroveShieldWrapperBlocks {
 
     if (seconds === 0 || startAngle === targetAngle) {
       this.servoAngles[port] = targetAngle;
-      return this.#setServo(port, targetAngle);
+      return this.#setServo(port, targetAngle, util);
     }
 
     const durationMs = seconds * 1000;
@@ -441,7 +441,7 @@ class GroveShieldWrapperBlocks {
       const ratio = step / steps;
       const angle = clampAngle(Math.round(startAngle + (targetAngle - startAngle) * ratio));
       this.servoAngles[port] = angle;
-      this.#setServo(port, angle);
+      this.#setServo(port, angle, util);
       if (step < steps) {
         await sleep(durationMs / steps);
       }
@@ -456,13 +456,13 @@ class GroveShieldWrapperBlocks {
     return this.base.stopTone();
   }
 
-  #setServo(port, angle) {
+  #setServo(port, angle, util) {
     return this.base.setServo({
       PIN: toPortPin(SERVO_PORTS, port),
       ANGLE: angle,
       RANGE: SERVO_RANGE,
       CENTER: SERVO_CENTER
-    });
+    }, util);
   }
 
   #installDebugHooks() {
