@@ -12,6 +12,7 @@ const extensionQuery = new URL(extensionURL).searchParams;
 const DEBUG_ENABLED = extensionQuery.get('v') === 'debug';
 
 const iconURL = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' rx='18' fill='%233e8b52'/%3E%3Crect x='14' y='20' width='52' height='40' rx='8' fill='%23f8f3e8'/%3E%3Ccircle cx='28' cy='40' r='6' fill='%23d97a2b'/%3E%3Ccircle cx='52' cy='40' r='6' fill='%232e6ccf'/%3E%3Cpath d='M20 14v12M32 14v12M44 14v12M56 14v12' stroke='%23f8f3e8' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E";
+const menuIconURI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAASklEQVR42mNgoAeQWVb6nxZ44C24cXYLSewRZMH3zy/AGKSZFPbgs4BUPEItuFmlDcfI4no55+F4hFswmooGxoLhU+GMWkCXFgsAwpEtR+p0groAAAAASUVORK5CYII=';
 
 const DIGITAL_PORTS = {
   P0: '0',
@@ -53,7 +54,7 @@ const entry = {
   extensionURL,
   collaborator: 'mnakaue',
   iconURL,
-  menuIconURL: iconURL,
+  menuIconURL: menuIconURI,
   insetIconURL: iconURL,
   description: EXTENSION_DESCRIPTION,
   tags: ['microbit', 'grove'],
@@ -84,7 +85,6 @@ class GroveShieldWrapperBlocks {
       P1: DEFAULT_SERVO_ANGLE,
       P2: DEFAULT_SERVO_ANGLE
     };
-    this.ledButtonEventListening = {};
     if (DEBUG_ENABLED) {
       this.#installDebugHooks();
       this.#logDebug('constructor', this.#debugSnapshot());
@@ -96,7 +96,6 @@ class GroveShieldWrapperBlocks {
       {
         opcode: 'whenConnected',
         blockType: 'hat',
-        isEdgeActivated: true,
         text: 'micro:bit につながったとき'
       },
       {
@@ -137,7 +136,6 @@ class GroveShieldWrapperBlocks {
       {
         opcode: 'whenLedButtonPressed',
         blockType: 'hat',
-        isEdgeActivated: true,
         text: 'Grove LEDボタン [PORT] が押されたとき',
         arguments: {
           PORT: {
@@ -216,7 +214,7 @@ class GroveShieldWrapperBlocks {
       id: EXTENSION_ID,
       name: EXTENSION_NAME,
       extensionURL,
-      menuIconURI: iconURL,
+      menuIconURI,
       blockIconURI: iconURL,
       showStatusButton: true,
       blocks,
@@ -289,27 +287,8 @@ class GroveShieldWrapperBlocks {
     return this._peripheral.disconnect();
   }
 
-  whenLedButtonPressed(args, util) {
-    const port = DUAL_SIGNAL_PORTS[String(args.PORT)] || DUAL_SIGNAL_PORTS.P0;
-    if (!this.isConnected()) {
-      this.ledButtonEventListening = {};
-      return false;
-    }
-    if (!this.ledButtonEventListening[port.button]) {
-      const resultPromise = this.base.listenPinEventType({
-        EVENT_TYPE: 'ON_EDGE',
-        PIN: port.button
-      }, util);
-      if (!resultPromise) return;
-      return resultPromise.then(() => {
-        this.ledButtonEventListening[port.button] = true;
-        return false;
-      });
-    }
-    return this.base.whenPinEvent({
-      EVENT: 'FALL',
-      PIN: port.button
-    });
+  whenLedButtonPressed(args) {
+    return this.ledButtonPressed(args);
   }
 
   ledButtonPressed(args) {
