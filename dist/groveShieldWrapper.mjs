@@ -65,6 +65,9 @@ class GroveShieldWrapperBlocks {
     this.base = new MicrobitMoreBlocks(runtime);
     this._peripheral = this.base._peripheral;
     this._peripheral._extensionId = EXTENSION_ID;
+    if (this.runtime && typeof this.runtime.registerPeripheralExtension === 'function') {
+      this.runtime.registerPeripheralExtension(EXTENSION_ID, this);
+    }
     this.debugHistory = [];
     this.lastDebugMessage = '';
     this.servoAngles = {
@@ -396,6 +399,8 @@ class GroveShieldWrapperBlocks {
   #debugSnapshot() {
     const connector = this._peripheral && this._peripheral._ble;
     return {
+      runtimeHasRegisterPeripheralExtension:
+        Boolean(this.runtime && typeof this.runtime.registerPeripheralExtension === 'function'),
       extensionId: this._peripheral ? this._peripheral._extensionId : 'no-peripheral',
       bleType: connector && connector.constructor ? connector.constructor.name : 'none',
       hasBle: Boolean(connector),
