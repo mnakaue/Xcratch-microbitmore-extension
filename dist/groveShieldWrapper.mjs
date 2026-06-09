@@ -8,6 +8,8 @@ const EXTENSION_NAME = 'Grove Wrapper';
 const EXTENSION_DESCRIPTION = 'Grove Shield for micro:bit 向けの分かりやすいラッパー';
 
 let extensionURL = import.meta.url;
+const extensionQuery = new URL(extensionURL).searchParams;
+const DEBUG_ENABLED = extensionQuery.get('v') === 'debug';
 
 const iconURL = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' rx='18' fill='%233e8b52'/%3E%3Crect x='14' y='20' width='52' height='40' rx='8' fill='%23f8f3e8'/%3E%3Ccircle cx='28' cy='40' r='6' fill='%23d97a2b'/%3E%3Ccircle cx='52' cy='40' r='6' fill='%232e6ccf'/%3E%3Cpath d='M20 14v12M32 14v12M44 14v12M56 14v12' stroke='%23f8f3e8' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E";
 
@@ -87,29 +89,162 @@ class GroveShieldWrapperBlocks {
       P1: DEFAULT_SERVO_ANGLE,
       P2: DEFAULT_SERVO_ANGLE
     };
-    this.#installDebugHooks();
-    this.#logDebug('constructor', this.#debugSnapshot());
+    if (DEBUG_ENABLED) {
+      this.#installDebugHooks();
+      this.#logDebug('constructor', this.#debugSnapshot());
+    }
   }
 
   getInfo() {
-    return {
-      id: EXTENSION_ID,
-      name: EXTENSION_NAME,
-      extensionURL,
-      blockIconURI: iconURL,
-      showStatusButton: true,
-      blocks: [
-        {
-          opcode: 'whenConnected',
-          blockType: 'hat',
-          isEdgeActivated: true,
-          text: 'micro:bit につながったとき'
-        },
-        {
-          opcode: 'isConnected',
-          blockType: 'boolean',
-          text: 'micro:bit がつながっている'
-        },
+    const blocks = [
+      {
+        opcode: 'whenConnected',
+        blockType: 'hat',
+        isEdgeActivated: true,
+        text: 'micro:bit につながったとき'
+      },
+      {
+        opcode: 'isConnected',
+        blockType: 'Boolean',
+        text: 'micro:bit がつながっている'
+      },
+      '---',
+      {
+        opcode: 'whenButtonPressed',
+        blockType: 'hat',
+        isEdgeActivated: true,
+        text: 'Grove ボタン [PORT] が押されたとき',
+        arguments: {
+          PORT: {
+            type: 'string',
+            menu: 'digitalPorts',
+            defaultValue: 'P14'
+          }
+        }
+      },
+      {
+        opcode: 'buttonPressed',
+        blockType: 'Boolean',
+        text: 'Grove ボタン [PORT] が押されている',
+        arguments: {
+          PORT: {
+            type: 'string',
+            menu: 'digitalPorts',
+            defaultValue: 'P14'
+          }
+        }
+      },
+      {
+        opcode: 'whenLedButtonPressed',
+        blockType: 'hat',
+        isEdgeActivated: true,
+        text: 'Grove LEDボタン [PORT] が押されたとき',
+        arguments: {
+          PORT: {
+            type: 'string',
+            menu: 'dualSignalPorts',
+            defaultValue: 'P0/P14'
+          }
+        }
+      },
+      {
+        opcode: 'ledButtonPressed',
+        blockType: 'Boolean',
+        text: 'Grove LEDボタン [PORT] が押されている',
+        arguments: {
+          PORT: {
+            type: 'string',
+            menu: 'dualSignalPorts',
+            defaultValue: 'P0/P14'
+          }
+        }
+      },
+      {
+        opcode: 'setLedButtonLed',
+        blockType: 'command',
+        text: 'Grove LEDボタン [PORT] のLEDを [STATE] にする',
+        arguments: {
+          PORT: {
+            type: 'string',
+            menu: 'dualSignalPorts',
+            defaultValue: 'P0/P14'
+          },
+          STATE: {
+            type: 'string',
+            menu: 'onOff',
+            defaultValue: 'true'
+          }
+        }
+      },
+      {
+        opcode: 'setLed',
+        blockType: 'command',
+        text: 'Grove LED を [PORT] で [STATE] にする',
+        arguments: {
+          PORT: {
+            type: 'string',
+            menu: 'digitalPorts',
+            defaultValue: 'P0'
+          },
+          STATE: {
+            type: 'string',
+            menu: 'onOff',
+            defaultValue: 'true'
+          }
+        }
+      },
+      {
+        opcode: 'readAnalog',
+        blockType: 'reporter',
+        text: 'Grove アナログ [PORT] の値',
+        arguments: {
+          PORT: {
+            type: 'string',
+            menu: 'analogPorts',
+            defaultValue: 'P0'
+          }
+        }
+      },
+      {
+        opcode: 'setServoAngle',
+        blockType: 'command',
+        text: 'Grove サーボを [PORT] で [ANGLE] 度にする',
+        arguments: {
+          PORT: {
+            type: 'string',
+            menu: 'servoPorts',
+            defaultValue: 'P0'
+          },
+          ANGLE: {
+            type: 'number',
+            defaultValue: 90
+          }
+        }
+      },
+      {
+        opcode: 'moveServoAngle',
+        blockType: 'command',
+        text: 'Grove サーボを [PORT] で [SECONDS] 秒かけて [ANGLE] 度にする',
+        arguments: {
+          PORT: {
+            type: 'string',
+            menu: 'servoPorts',
+            defaultValue: 'P0'
+          },
+          SECONDS: {
+            type: 'number',
+            defaultValue: 1
+          },
+          ANGLE: {
+            type: 'number',
+            defaultValue: 90
+          }
+        }
+      }
+    ];
+
+    if (DEBUG_ENABLED) {
+      blocks.splice(2, 0,
         {
           opcode: 'getConnectionDebugInfo',
           blockType: 'reporter',
@@ -119,141 +254,17 @@ class GroveShieldWrapperBlocks {
           opcode: 'clearConnectionDebugInfo',
           blockType: 'command',
           text: '接続デバッグを消す'
-        },
-        '---',
-        {
-          opcode: 'whenButtonPressed',
-          blockType: 'hat',
-          isEdgeActivated: true,
-          text: 'Grove ボタン [PORT] が押されたとき',
-          arguments: {
-            PORT: {
-              type: 'string',
-              menu: 'digitalPorts',
-              defaultValue: 'P14'
-            }
-          }
-        },
-        {
-          opcode: 'buttonPressed',
-          blockType: 'boolean',
-          text: 'Grove ボタン [PORT] が押されている',
-          arguments: {
-            PORT: {
-              type: 'string',
-              menu: 'digitalPorts',
-              defaultValue: 'P14'
-            }
-          }
-        },
-        {
-          opcode: 'whenLedButtonPressed',
-          blockType: 'hat',
-          isEdgeActivated: true,
-          text: 'Grove LEDボタン [PORT] が押されたとき',
-          arguments: {
-            PORT: {
-              type: 'string',
-              menu: 'dualSignalPorts',
-              defaultValue: 'P0/P14'
-            }
-          }
-        },
-        {
-          opcode: 'ledButtonPressed',
-          blockType: 'boolean',
-          text: 'Grove LEDボタン [PORT] が押されている',
-          arguments: {
-            PORT: {
-              type: 'string',
-              menu: 'dualSignalPorts',
-              defaultValue: 'P0/P14'
-            }
-          }
-        },
-        {
-          opcode: 'setLedButtonLed',
-          blockType: 'command',
-          text: 'Grove LEDボタン [PORT] のLEDを [STATE] にする',
-          arguments: {
-            PORT: {
-              type: 'string',
-              menu: 'dualSignalPorts',
-              defaultValue: 'P0/P14'
-            },
-            STATE: {
-              type: 'string',
-              menu: 'onOff',
-              defaultValue: 'true'
-            }
-          }
-        },
-        {
-          opcode: 'setLed',
-          blockType: 'command',
-          text: 'Grove LED を [PORT] で [STATE] にする',
-          arguments: {
-            PORT: {
-              type: 'string',
-              menu: 'digitalPorts',
-              defaultValue: 'P0'
-            },
-            STATE: {
-              type: 'string',
-              menu: 'onOff',
-              defaultValue: 'true'
-            }
-          }
-        },
-        {
-          opcode: 'readAnalog',
-          blockType: 'reporter',
-          text: 'Grove アナログ [PORT] の値',
-          arguments: {
-            PORT: {
-              type: 'string',
-              menu: 'analogPorts',
-              defaultValue: 'P0'
-            }
-          }
-        },
-        {
-          opcode: 'setServoAngle',
-          blockType: 'command',
-          text: 'Grove サーボを [PORT] で [ANGLE] 度にする',
-          arguments: {
-            PORT: {
-              type: 'string',
-              menu: 'servoPorts',
-              defaultValue: 'P0'
-            },
-            ANGLE: {
-              type: 'number',
-              defaultValue: 90
-            }
-          }
-        },
-        {
-          opcode: 'moveServoAngle',
-          blockType: 'command',
-          text: 'Grove サーボを [PORT] で [SECONDS] 秒かけて [ANGLE] 度にする',
-          arguments: {
-            PORT: {
-              type: 'string',
-              menu: 'servoPorts',
-              defaultValue: 'P0'
-            },
-            SECONDS: {
-              type: 'number',
-              defaultValue: 1
-            },
-            ANGLE: {
-              type: 'number',
-              defaultValue: 90
-            }
-          }
         }
-      ],
+      );
+    }
+
+    return {
+      id: EXTENSION_ID,
+      name: EXTENSION_NAME,
+      extensionURL,
+      blockIconURI: iconURL,
+      showStatusButton: true,
+      blocks,
       menus: {
         digitalPorts: {
           acceptReporters: false,
@@ -291,27 +302,35 @@ class GroveShieldWrapperBlocks {
   }
 
   getConnectionDebugInfo() {
+    if (!DEBUG_ENABLED) return '';
     return this.lastDebugMessage || 'debug-empty';
   }
 
   clearConnectionDebugInfo() {
+    if (!DEBUG_ENABLED) return;
     this.debugHistory = [];
     this.lastDebugMessage = '';
     this.#logDebug('debug-cleared', this.#debugSnapshot());
   }
 
   scan() {
-    this.#logDebug('scan-called', this.#debugSnapshot());
+    if (DEBUG_ENABLED) {
+      this.#logDebug('scan-called', this.#debugSnapshot());
+    }
     return this._peripheral.scan();
   }
 
   connect(id) {
-    this.#logDebug('connect-called', {id, ...this.#debugSnapshot()});
+    if (DEBUG_ENABLED) {
+      this.#logDebug('connect-called', {id, ...this.#debugSnapshot()});
+    }
     return this._peripheral.connect(id);
   }
 
   disconnect() {
-    this.#logDebug('disconnect-called', this.#debugSnapshot());
+    if (DEBUG_ENABLED) {
+      this.#logDebug('disconnect-called', this.#debugSnapshot());
+    }
     return this._peripheral.disconnect();
   }
 
@@ -521,6 +540,9 @@ class GroveShieldWrapperBlocks {
   }
 
   #logDebug(label, detail) {
+    if (!DEBUG_ENABLED) {
+      return;
+    }
     const line = `${new Date().toISOString()} ${label} ${JSON.stringify(this.#safeSerialize(detail))}`;
     this.lastDebugMessage = line;
     this.debugHistory.push(line);
