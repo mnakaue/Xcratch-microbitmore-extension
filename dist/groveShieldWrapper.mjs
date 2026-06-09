@@ -14,7 +14,10 @@ const iconURL = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' vi
 const DIGITAL_PORTS = {
   P0: '0',
   P1: '1',
-  P2: '2'
+  P2: '2',
+  P14: '14',
+  P15: '15',
+  P16: '16'
 };
 
 const ANALOG_PORTS = {
@@ -26,13 +29,16 @@ const ANALOG_PORTS = {
 const SERVO_PORTS = {
   P0: '0',
   P1: '1',
-  P2: '2'
+  P2: '2',
+  P14: '14',
+  P15: '15',
+  P16: '16'
 };
 
-const LED_BUTTON_PORTS = {
-  P0: {led: '0', button: '14'},
-  P1: {led: '1', button: '15'},
-  P2: {led: '2', button: '16'}
+const DUAL_SIGNAL_PORTS = {
+  'P0/P14': {led: '0', button: '14'},
+  'P1/P15': {led: '1', button: '15'},
+  'P2/P16': {led: '2', button: '16'}
 };
 
 const DEFAULT_SERVO_ANGLE = 90;
@@ -124,7 +130,7 @@ class GroveShieldWrapperBlocks {
             PORT: {
               type: 'string',
               menu: 'digitalPorts',
-              defaultValue: 'P0'
+              defaultValue: 'P14'
             }
           }
         },
@@ -136,7 +142,7 @@ class GroveShieldWrapperBlocks {
             PORT: {
               type: 'string',
               menu: 'digitalPorts',
-              defaultValue: 'P0'
+              defaultValue: 'P14'
             }
           }
         },
@@ -148,8 +154,8 @@ class GroveShieldWrapperBlocks {
           arguments: {
             PORT: {
               type: 'string',
-              menu: 'digitalPorts',
-              defaultValue: 'P0'
+              menu: 'dualSignalPorts',
+              defaultValue: 'P0/P14'
             }
           }
         },
@@ -160,8 +166,8 @@ class GroveShieldWrapperBlocks {
           arguments: {
             PORT: {
               type: 'string',
-              menu: 'digitalPorts',
-              defaultValue: 'P0'
+              menu: 'dualSignalPorts',
+              defaultValue: 'P0/P14'
             }
           }
         },
@@ -172,8 +178,8 @@ class GroveShieldWrapperBlocks {
           arguments: {
             PORT: {
               type: 'string',
-              menu: 'digitalPorts',
-              defaultValue: 'P0'
+              menu: 'dualSignalPorts',
+              defaultValue: 'P0/P14'
             },
             STATE: {
               type: 'string',
@@ -190,7 +196,7 @@ class GroveShieldWrapperBlocks {
             PORT: {
               type: 'string',
               menu: 'digitalPorts',
-              defaultValue: 'P1'
+              defaultValue: 'P0'
             },
             STATE: {
               type: 'string',
@@ -219,7 +225,7 @@ class GroveShieldWrapperBlocks {
             PORT: {
               type: 'string',
               menu: 'servoPorts',
-              defaultValue: 'P2'
+              defaultValue: 'P0'
             },
             ANGLE: {
               type: 'number',
@@ -235,7 +241,7 @@ class GroveShieldWrapperBlocks {
             PORT: {
               type: 'string',
               menu: 'servoPorts',
-              defaultValue: 'P2'
+              defaultValue: 'P0'
             },
             SECONDS: {
               type: 'number',
@@ -251,7 +257,7 @@ class GroveShieldWrapperBlocks {
       menus: {
         digitalPorts: {
           acceptReporters: false,
-          items: ['P0', 'P1', 'P2']
+          items: ['P0', 'P1', 'P2', 'P14', 'P15', 'P16']
         },
         analogPorts: {
           acceptReporters: false,
@@ -259,7 +265,11 @@ class GroveShieldWrapperBlocks {
         },
         servoPorts: {
           acceptReporters: false,
-          items: ['P0', 'P1', 'P2']
+          items: ['P0', 'P1', 'P2', 'P14', 'P15', 'P16']
+        },
+        dualSignalPorts: {
+          acceptReporters: false,
+          items: ['P0/P14', 'P1/P15', 'P2/P16']
         },
         onOff: {
           acceptReporters: false,
@@ -320,12 +330,12 @@ class GroveShieldWrapperBlocks {
   }
 
   ledButtonPressed(args) {
-    const port = LED_BUTTON_PORTS[String(args.PORT)] || LED_BUTTON_PORTS.P0;
+    const port = DUAL_SIGNAL_PORTS[String(args.PORT)] || DUAL_SIGNAL_PORTS['P0/P14'];
     return !this.base.isPinHigh({PIN: port.button});
   }
 
   setLedButtonLed(args) {
-    const port = LED_BUTTON_PORTS[String(args.PORT)] || LED_BUTTON_PORTS.P0;
+    const port = DUAL_SIGNAL_PORTS[String(args.PORT)] || DUAL_SIGNAL_PORTS['P0/P14'];
     return this.base.setDigitalOut({
       PIN: port.led,
       LEVEL: String(args.STATE) === 'true' ? 'true' : 'false'
