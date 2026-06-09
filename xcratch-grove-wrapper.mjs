@@ -171,23 +171,6 @@ class GroveShieldWrapperBlocks {
         }
       },
       {
-        opcode: 'setLed',
-        blockType: 'command',
-        text: 'Grove LED を [PORT] で [STATE] にする',
-        arguments: {
-          PORT: {
-            type: 'string',
-            menu: 'digitalPorts',
-            defaultValue: 'P0'
-          },
-          STATE: {
-            type: 'string',
-            menu: 'onOff',
-            defaultValue: 'true'
-          }
-        }
-      },
-      {
         opcode: 'readAnalog',
         blockType: 'reporter',
         text: 'Grove アナログ [PORT] の値',
@@ -351,13 +334,6 @@ class GroveShieldWrapperBlocks {
     const port = DUAL_SIGNAL_PORTS[String(args.PORT)] || DUAL_SIGNAL_PORTS.P0;
     return this.base.setDigitalOut({
       PIN: port.led,
-      LEVEL: String(args.STATE) === 'true' ? 'true' : 'false'
-    });
-  }
-
-  setLed(args) {
-    return this.base.setDigitalOut({
-      PIN: toPortPin(DIGITAL_PORTS, args.PORT),
       LEVEL: String(args.STATE) === 'true' ? 'true' : 'false'
     });
   }
