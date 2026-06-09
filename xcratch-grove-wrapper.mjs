@@ -75,7 +75,7 @@ class GroveShieldWrapperBlocks {
       name: EXTENSION_NAME,
       extensionURL,
       blockIconURI: iconURL,
-      showStatusButton: false,
+      showStatusButton: true,
       blocks: [
         {
           opcode: 'isConnected',
