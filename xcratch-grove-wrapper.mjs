@@ -191,6 +191,18 @@ class GroveShieldWrapperBlocks {
     return Boolean(this._peripheral && this._peripheral.isConnected());
   }
 
+  scan() {
+    return this._peripheral.scan();
+  }
+
+  connect(id) {
+    return this._peripheral.connect(id);
+  }
+
+  disconnect() {
+    return this._peripheral.disconnect();
+  }
+
   buttonPressed(args) {
     return this.base.isPinHigh({
       PIN: toPortPin(DIGITAL_PORTS, args.PORT)
