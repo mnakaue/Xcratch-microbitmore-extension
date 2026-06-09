@@ -216,6 +216,7 @@ class GroveShieldWrapperBlocks {
       id: EXTENSION_ID,
       name: EXTENSION_NAME,
       extensionURL,
+      menuIconURI: iconURL,
       blockIconURI: iconURL,
       showStatusButton: true,
       blocks,
