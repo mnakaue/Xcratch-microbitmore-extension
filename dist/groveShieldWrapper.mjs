@@ -63,10 +63,8 @@ const DUAL_SIGNAL_PORTS = {
 const DEFAULT_SERVO_ANGLE = 90;
 const SERVO_RANGE = 2000;
 const SERVO_CENTER = 1500;
-const SERVO_MIN_STEP_MS = 50;
 const DEBUG_HISTORY_LIMIT = 12;
 const PULL_NONE = 0;
-const PIN_EVENT_ON_EDGE = 1;
 
 const toPortPin = (table, portName) => table[String(portName)] || '0';
 const clampAngle = angle => Math.max(0, Math.min(180, angle));
@@ -110,11 +108,6 @@ class GroveShieldWrapperBlocks {
       P1: DEFAULT_SERVO_ANGLE,
       P2: DEFAULT_SERVO_ANGLE
     };
-    this.servoMoveTokens = {
-      P0: 0,
-      P1: 0,
-      P2: 0
-    };
     this.servoActivePorts = new Set();
     this.ledStates = {
       P0: false,
@@ -123,6 +116,16 @@ class GroveShieldWrapperBlocks {
     };
     this.ledActivePorts = new Set();
     this.buttonConfigState = {};
+    this.ledButtonPreviousPressed = {
+      P0: false,
+      P1: false,
+      P2: false
+    };
+    this.ledButtonEventReady = {
+      P0: false,
+      P1: false,
+      P2: false
+    };
     this.transportQueue = Promise.resolve();
     this.connectionEpoch = 0;
     this.lastConnectionState = false;
@@ -212,26 +215,6 @@ class GroveShieldWrapperBlocks {
           }
         }
       },
-      {
-        opcode: 'moveServoAngle',
-        blockType: 'command',
-        text: 'Grove サーボを [PORT] で [SECONDS] 秒かけて [ANGLE] 度にする',
-        arguments: {
-          PORT: {
-            type: 'string',
-            menu: 'servoPorts',
-            defaultValue: 'P0'
-          },
-          SECONDS: {
-            type: 'number',
-            defaultValue: 1
-          },
-          ANGLE: {
-            type: 'number',
-            defaultValue: 90
-          }
-        }
-      }
     ];
 
     const microbitMoreBlocks = [];
@@ -352,12 +335,18 @@ class GroveShieldWrapperBlocks {
 
   whenLedButtonPressed(args) {
     const portName = this.#normalizePortName(args.PORT, DUAL_SIGNAL_PORTS);
-    const port = DUAL_SIGNAL_PORTS[portName];
     this.#ensureLedButtonReady(portName).catch(() => {});
-    return this.base.whenPinEvent({
-      PIN: port.button,
-      EVENT: 'FALL'
-    });
+    if (!this.isConnected()) {
+      this.ledButtonEventReady[portName] = false;
+      this.ledButtonPreviousPressed[portName] = false;
+      return false;
+    }
+    const pressed = this.#readLedButtonPressed(portName);
+    const wasPressed = this.ledButtonPreviousPressed[portName];
+    const isReady = this.ledButtonEventReady[portName];
+    this.ledButtonPreviousPressed[portName] = pressed;
+    this.ledButtonEventReady[portName] = true;
+    return isReady && pressed && !wasPressed;
   }
 
   whenButtonEvent(args) {
@@ -382,12 +371,11 @@ class GroveShieldWrapperBlocks {
 
   ledButtonPressed(args) {
     const portName = this.#normalizePortName(args.PORT, DUAL_SIGNAL_PORTS);
-    const port = DUAL_SIGNAL_PORTS[portName];
     this.#ensureLedButtonReady(portName).catch(() => {});
     if (!this.isConnected()) {
       return false;
     }
-    return !this.microbit.isPinHigh(Number(port.button));
+    return this.#readLedButtonPressed(portName);
   }
 
   async setLedButtonLed(args) {
@@ -457,46 +445,7 @@ class GroveShieldWrapperBlocks {
     const angle = clampAngle(Number(args.ANGLE) || 0);
     this.servoAngles[port] = angle;
     this.servoActivePorts.add(port);
-    this.servoMoveTokens[port] += 1;
     await this.#setServo(port, angle);
-  }
-
-  async moveServoAngle(args) {
-    const port = this.#normalizePortName(args.PORT, SERVO_PORTS);
-    const targetAngle = clampAngle(Number(args.ANGLE) || 0);
-    const seconds = Math.max(0, Number(args.SECONDS) || 0);
-    const startAngle = this.servoAngles[port] ?? DEFAULT_SERVO_ANGLE;
-    const moveToken = this.#nextServoMoveToken(port);
-    this.servoActivePorts.add(port);
-
-    if (seconds === 0 || startAngle === targetAngle) {
-      this.servoAngles[port] = targetAngle;
-      await this.#setServo(port, targetAngle);
-      return;
-    }
-
-    const durationMs = seconds * 1000;
-    const steps = Math.max(1, Math.ceil(durationMs / SERVO_MIN_STEP_MS));
-    const connectionEpoch = this.connectionEpoch;
-
-    for (let step = 1; step <= steps; step += 1) {
-      if (!this.isConnected()) {
-        return;
-      }
-      if (this.connectionEpoch !== connectionEpoch) {
-        return;
-      }
-      if (this.servoMoveTokens[port] !== moveToken) {
-        return;
-      }
-      const ratio = step / steps;
-      const angle = clampAngle(Math.round(startAngle + (targetAngle - startAngle) * ratio));
-      this.servoAngles[port] = angle;
-      await this.#setServo(port, angle);
-      if (step < steps) {
-        await sleep(durationMs / steps);
-      }
-    }
   }
 
   playTone(args, util) {
@@ -515,17 +464,17 @@ class GroveShieldWrapperBlocks {
     });
   }
 
+  #readLedButtonPressed(portName) {
+    const port = DUAL_SIGNAL_PORTS[portName];
+    return !this.microbit.isPinHigh(Number(port.button));
+  }
+
   #normalizePortName(portName, table) {
     const name = String(portName);
     if (table[name]) {
       return name;
     }
     return Object.keys(table)[0];
-  }
-
-  #nextServoMoveToken(port) {
-    this.servoMoveTokens[port] = (this.servoMoveTokens[port] || 0) + 1;
-    return this.servoMoveTokens[port];
   }
 
   #ensureLedButtonReady(portName) {
@@ -540,9 +489,7 @@ class GroveShieldWrapperBlocks {
     const port = DUAL_SIGNAL_PORTS[portName];
     const promise = this.#sendTransportCommand(async () => {
       await this.#waitForTransportReady();
-      await this.microbit.setPullMode(Number(port.button), PULL_NONE);
-      await this.#waitForTransportReady();
-      return this.microbit.listenPinEventType(Number(port.button), PIN_EVENT_ON_EDGE);
+      return this.microbit.setPullMode(Number(port.button), PULL_NONE);
     });
     this.buttonConfigState[portName] = {epoch, promise};
     return promise.catch(error => {
@@ -604,10 +551,11 @@ class GroveShieldWrapperBlocks {
     this.lastConnectionState = connected;
     this.connectionEpoch += 1;
     this.transportQueue = Promise.resolve();
-    Object.keys(this.servoMoveTokens).forEach(port => {
-      this.servoMoveTokens[port] += 1;
-    });
     this.buttonConfigState = {};
+    Object.keys(this.ledButtonPreviousPressed).forEach(port => {
+      this.ledButtonPreviousPressed[port] = false;
+      this.ledButtonEventReady[port] = false;
+    });
     if (connected) {
       this.#primeGroveState(this.connectionEpoch).catch(error => {
         if (DEBUG_ENABLED) {
