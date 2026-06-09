@@ -106,44 +106,6 @@ class GroveShieldWrapperBlocks {
       },
       '---',
       {
-        opcode: 'whenButtonPressed',
-        blockType: 'hat',
-        isEdgeActivated: true,
-        text: 'Grove ボタン [PORT] が押されたとき',
-        arguments: {
-          PORT: {
-            type: 'string',
-            menu: 'digitalPorts',
-            defaultValue: 'P0'
-          }
-        }
-      },
-      {
-        opcode: 'buttonPressed',
-        blockType: 'Boolean',
-        text: 'Grove ボタン [PORT] が押されている',
-        arguments: {
-          PORT: {
-            type: 'string',
-            menu: 'digitalPorts',
-            defaultValue: 'P0'
-          }
-        }
-      },
-      {
-        opcode: 'whenLedButtonPressed',
-        blockType: 'hat',
-        isEdgeActivated: true,
-        text: 'Grove LEDボタン [PORT] が押されたとき',
-        arguments: {
-          PORT: {
-            type: 'string',
-            menu: 'dualSignalPorts',
-            defaultValue: 'P0'
-          }
-        }
-      },
-      {
         opcode: 'ledButtonPressed',
         blockType: 'Boolean',
         text: 'Grove LEDボタン [PORT] が押されている',
@@ -169,6 +131,19 @@ class GroveShieldWrapperBlocks {
             type: 'string',
             menu: 'onOff',
             defaultValue: 'true'
+          }
+        }
+      },
+      {
+        opcode: 'whenLedButtonPressed',
+        blockType: 'hat',
+        isEdgeActivated: true,
+        text: 'Grove LEDボタン [PORT] が押されたとき',
+        arguments: {
+          PORT: {
+            type: 'string',
+            menu: 'dualSignalPorts',
+            defaultValue: 'P0'
           }
         }
       },
@@ -313,20 +288,6 @@ class GroveShieldWrapperBlocks {
     return this._peripheral.disconnect();
   }
 
-  buttonPressed(args) {
-    return this.base.isPinHigh({
-      PIN: toPortPin(DIGITAL_PORTS, args.PORT)
-    });
-  }
-
-  whenButtonPressed(args) {
-    const port = String(args.PORT);
-    const pressed = this.buttonPressed(args);
-    const prevPressed = this.prevButtonStates[port];
-    this.#queueButtonStateUpdate();
-    return pressed && !prevPressed;
-  }
-
   whenLedButtonPressed(args) {
     const port = String(args.PORT);
     const pressed = this.ledButtonPressed(args);
@@ -395,28 +356,12 @@ class GroveShieldWrapperBlocks {
     });
   }
 
-  #queueButtonStateUpdate() {
-    if (this.updateButtonStateTimer) return;
-    this.updateButtonStateTimer = setTimeout(() => {
-      this.prevButtonStates = this.#readButtonStates();
-      this.updateButtonStateTimer = null;
-    }, this.runtime.currentStepTime);
-  }
-
   #queueLedButtonStateUpdate() {
     if (this.updateLedButtonStateTimer) return;
     this.updateLedButtonStateTimer = setTimeout(() => {
       this.prevLedButtonStates = this.#readLedButtonStates();
       this.updateLedButtonStateTimer = null;
     }, this.runtime.currentStepTime);
-  }
-
-  #readButtonStates() {
-    const states = {};
-    Object.keys(DIGITAL_PORTS).forEach(port => {
-      states[port] = this.base.isPinHigh({PIN: DIGITAL_PORTS[port]});
-    });
-    return states;
   }
 
   #readLedButtonStates() {
