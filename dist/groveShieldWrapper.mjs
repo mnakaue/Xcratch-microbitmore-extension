@@ -53,6 +53,7 @@ const entry = {
   extensionURL,
   collaborator: 'mnakaue',
   iconURL,
+  menuIconURL: iconURL,
   insetIconURL: iconURL,
   description: EXTENSION_DESCRIPTION,
   tags: ['microbit', 'grove'],
@@ -83,8 +84,7 @@ class GroveShieldWrapperBlocks {
       P1: DEFAULT_SERVO_ANGLE,
       P2: DEFAULT_SERVO_ANGLE
     };
-    this.prevButtonStates = {};
-    this.prevLedButtonStates = {};
+    this.#configureLedButtonEvents();
     if (DEBUG_ENABLED) {
       this.#installDebugHooks();
       this.#logDebug('constructor', this.#debugSnapshot());
@@ -290,11 +290,11 @@ class GroveShieldWrapperBlocks {
   }
 
   whenLedButtonPressed(args) {
-    const port = String(args.PORT);
-    const pressed = this.ledButtonPressed(args);
-    const prevPressed = this.prevLedButtonStates[port];
-    this.#queueLedButtonStateUpdate();
-    return pressed && !prevPressed;
+    const port = DUAL_SIGNAL_PORTS[String(args.PORT)] || DUAL_SIGNAL_PORTS.P0;
+    return this.base.whenPinEvent({
+      EVENT: 'FALL',
+      PIN: port.button
+    });
   }
 
   ledButtonPressed(args) {
@@ -357,20 +357,13 @@ class GroveShieldWrapperBlocks {
     });
   }
 
-  #queueLedButtonStateUpdate() {
-    if (this.updateLedButtonStateTimer) return;
-    this.updateLedButtonStateTimer = setTimeout(() => {
-      this.prevLedButtonStates = this.#readLedButtonStates();
-      this.updateLedButtonStateTimer = null;
-    }, this.runtime.currentStepTime);
-  }
-
-  #readLedButtonStates() {
-    const states = {};
-    Object.entries(DUAL_SIGNAL_PORTS).forEach(([port, pins]) => {
-      states[port] = !this.base.isPinHigh({PIN: pins.button});
+  #configureLedButtonEvents() {
+    Object.values(DUAL_SIGNAL_PORTS).forEach(({button}) => {
+      this.base.listenPinEventType({
+        EVENT_TYPE: 'ON_EDGE',
+        PIN: button
+      });
     });
-    return states;
   }
 
   #installDebugHooks() {
