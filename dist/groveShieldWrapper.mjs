@@ -62,6 +62,8 @@ class GroveShieldWrapperBlocks {
   constructor(runtime) {
     this.runtime = runtime;
     this.base = new MicrobitMoreBlocks(runtime);
+    this._peripheral = this.base._peripheral;
+    this._peripheral._extensionId = EXTENSION_ID;
     this.servoAngles = {
       P0: DEFAULT_SERVO_ANGLE,
       P1: DEFAULT_SERVO_ANGLE,
@@ -186,7 +188,7 @@ class GroveShieldWrapperBlocks {
   }
 
   isConnected() {
-    return Boolean(this.base && this.base._peripheral && this.base._peripheral.isConnected());
+    return Boolean(this._peripheral && this._peripheral.isConnected());
   }
 
   buttonPressed(args) {
