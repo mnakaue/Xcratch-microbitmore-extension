@@ -29,6 +29,12 @@ const SERVO_PORTS = {
   P2: '2'
 };
 
+const LED_BUTTON_PORTS = {
+  P0: {led: '0', button: '14'},
+  P1: {led: '1', button: '15'},
+  P2: {led: '2', button: '16'}
+};
+
 const DEFAULT_SERVO_ANGLE = 90;
 const SERVO_RANGE = 2000;
 const SERVO_CENTER = 1500;
@@ -131,6 +137,48 @@ class GroveShieldWrapperBlocks {
               type: 'string',
               menu: 'digitalPorts',
               defaultValue: 'P0'
+            }
+          }
+        },
+        {
+          opcode: 'whenLedButtonPressed',
+          blockType: 'hat',
+          isEdgeActivated: true,
+          text: 'Grove LEDボタン [PORT] が押されたとき',
+          arguments: {
+            PORT: {
+              type: 'string',
+              menu: 'digitalPorts',
+              defaultValue: 'P0'
+            }
+          }
+        },
+        {
+          opcode: 'ledButtonPressed',
+          blockType: 'boolean',
+          text: 'Grove LEDボタン [PORT] が押されている',
+          arguments: {
+            PORT: {
+              type: 'string',
+              menu: 'digitalPorts',
+              defaultValue: 'P0'
+            }
+          }
+        },
+        {
+          opcode: 'setLedButtonLed',
+          blockType: 'command',
+          text: 'Grove LEDボタン [PORT] のLEDを [STATE] にする',
+          arguments: {
+            PORT: {
+              type: 'string',
+              menu: 'digitalPorts',
+              defaultValue: 'P0'
+            },
+            STATE: {
+              type: 'string',
+              menu: 'onOff',
+              defaultValue: 'true'
             }
           }
         },
@@ -265,6 +313,23 @@ class GroveShieldWrapperBlocks {
 
   whenButtonPressed(args) {
     return this.buttonPressed(args);
+  }
+
+  whenLedButtonPressed(args) {
+    return this.ledButtonPressed(args);
+  }
+
+  ledButtonPressed(args) {
+    const port = LED_BUTTON_PORTS[String(args.PORT)] || LED_BUTTON_PORTS.P0;
+    return !this.base.isPinHigh({PIN: port.button});
+  }
+
+  setLedButtonLed(args) {
+    const port = LED_BUTTON_PORTS[String(args.PORT)] || LED_BUTTON_PORTS.P0;
+    return this.base.setDigitalOut({
+      PIN: port.led,
+      LEVEL: String(args.STATE) === 'true' ? 'true' : 'false'
+    });
   }
 
   setLed(args) {
