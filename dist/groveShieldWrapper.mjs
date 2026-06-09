@@ -33,6 +33,7 @@ const DEFAULT_SERVO_ANGLE = 90;
 const SERVO_RANGE = 2000;
 const SERVO_CENTER = 1500;
 const SERVO_MIN_STEP_MS = 50;
+const DEBUG_HISTORY_LIMIT = 12;
 
 const toPortPin = (table, portName) => table[String(portName)] || '0';
 const clampAngle = angle => Math.max(0, Math.min(180, angle));
@@ -64,11 +65,15 @@ class GroveShieldWrapperBlocks {
     this.base = new MicrobitMoreBlocks(runtime);
     this._peripheral = this.base._peripheral;
     this._peripheral._extensionId = EXTENSION_ID;
+    this.debugHistory = [];
+    this.lastDebugMessage = '';
     this.servoAngles = {
       P0: DEFAULT_SERVO_ANGLE,
       P1: DEFAULT_SERVO_ANGLE,
       P2: DEFAULT_SERVO_ANGLE
     };
+    this.#installDebugHooks();
+    this.#logDebug('constructor', this.#debugSnapshot());
   }
 
   getInfo() {
@@ -83,6 +88,16 @@ class GroveShieldWrapperBlocks {
           opcode: 'isConnected',
           blockType: 'boolean',
           text: 'micro:bit がつながっている'
+        },
+        {
+          opcode: 'getConnectionDebugInfo',
+          blockType: 'reporter',
+          text: '接続デバッグ状態'
+        },
+        {
+          opcode: 'clearConnectionDebugInfo',
+          blockType: 'command',
+          text: '接続デバッグを消す'
         },
         '---',
         {
@@ -191,15 +206,28 @@ class GroveShieldWrapperBlocks {
     return Boolean(this._peripheral && this._peripheral.isConnected());
   }
 
+  getConnectionDebugInfo() {
+    return this.lastDebugMessage || 'debug-empty';
+  }
+
+  clearConnectionDebugInfo() {
+    this.debugHistory = [];
+    this.lastDebugMessage = '';
+    this.#logDebug('debug-cleared', this.#debugSnapshot());
+  }
+
   scan() {
+    this.#logDebug('scan-called', this.#debugSnapshot());
     return this._peripheral.scan();
   }
 
   connect(id) {
+    this.#logDebug('connect-called', {id, ...this.#debugSnapshot()});
     return this._peripheral.connect(id);
   }
 
   disconnect() {
+    this.#logDebug('disconnect-called', this.#debugSnapshot());
     return this._peripheral.disconnect();
   }
 
@@ -261,6 +289,141 @@ class GroveShieldWrapperBlocks {
       RANGE: SERVO_RANGE,
       CENTER: SERVO_CENTER
     });
+  }
+
+  #installDebugHooks() {
+    this.#wrapPeripheralMethod('scan', () => this.#debugSnapshot());
+    this.#wrapPeripheralMethod('scanBLE', () => this.#debugSnapshot());
+    this.#wrapPeripheralMethod('scanSerial', () => this.#debugSnapshot());
+    this.#wrapPeripheralMethod('connect', id => ({id, ...this.#debugSnapshot()}));
+    this.#wrapPeripheralMethod('disconnect', () => this.#debugSnapshot());
+    this.#wrapPeripheralMethod('onDisconnect', () => this.#debugSnapshot());
+    this.#installRuntimeHooks();
+  }
+
+  #installRuntimeHooks() {
+    if (!this.runtime || typeof this.runtime.on !== 'function') {
+      return;
+    }
+
+    const eventNames = [
+      'PERIPHERAL_LIST_UPDATE',
+      'USER_PICKED_PERIPHERAL',
+      'PERIPHERAL_CONNECTED',
+      'PERIPHERAL_DISCONNECTED',
+      'PERIPHERAL_REQUEST_ERROR'
+    ];
+
+    eventNames.forEach(name => {
+      const eventName = this.runtime.constructor && this.runtime.constructor[name];
+      if (!eventName) return;
+      this.runtime.on(eventName, payload => {
+        this.#logDebug(`runtime-${name.toLowerCase()}`, {
+          payload: this.#safeSerialize(payload),
+          ...this.#debugSnapshot()
+        });
+      });
+    });
+  }
+
+  #wrapPeripheralMethod(name, detailFactory) {
+    const original = this._peripheral && this._peripheral[name];
+    if (typeof original !== 'function' || original.__groveWrapped) {
+      return;
+    }
+
+    const self = this;
+    const wrapped = function (...args) {
+      self.#logDebug(`${name}-start`, detailFactory ? detailFactory(...args) : args);
+      const result = original.apply(this, args);
+      self.#installBleDebugHooks();
+      if (result && typeof result.then === 'function') {
+        return result.then(value => {
+          self.#logDebug(`${name}-resolved`, self.#debugSnapshot());
+          return value;
+        }).catch(error => {
+          self.#logDebug(`${name}-error`, {message: String(error), ...self.#debugSnapshot()});
+          throw error;
+        });
+      }
+      self.#logDebug(`${name}-done`, self.#debugSnapshot());
+      return result;
+    };
+    wrapped.__groveWrapped = true;
+    this._peripheral[name] = wrapped;
+  }
+
+  #installBleDebugHooks() {
+    const connector = this._peripheral && this._peripheral._ble;
+    if (!connector) {
+      return;
+    }
+    this.#wrapBleMethod(connector, 'requestPeripheral');
+    this.#wrapBleMethod(connector, 'connectPeripheral');
+    this.#wrapBleMethod(connector, 'disconnect');
+  }
+
+  #wrapBleMethod(connector, name) {
+    const original = connector && connector[name];
+    if (typeof original !== 'function' || original.__groveWrapped) {
+      return;
+    }
+
+    const self = this;
+    const wrapped = function (...args) {
+      self.#logDebug(`ble-${name}-start`, {
+        args: self.#safeSerialize(args),
+        connector: connector.constructor ? connector.constructor.name : 'unknown',
+        ...self.#debugSnapshot()
+      });
+      const result = original.apply(this, args);
+      if (result && typeof result.then === 'function') {
+        return result.then(value => {
+          self.#logDebug(`ble-${name}-resolved`, self.#debugSnapshot());
+          return value;
+        }).catch(error => {
+          self.#logDebug(`ble-${name}-error`, {message: String(error), ...self.#debugSnapshot()});
+          throw error;
+        });
+      }
+      self.#logDebug(`ble-${name}-done`, self.#debugSnapshot());
+      return result;
+    };
+    wrapped.__groveWrapped = true;
+    connector[name] = wrapped;
+  }
+
+  #debugSnapshot() {
+    const connector = this._peripheral && this._peripheral._ble;
+    return {
+      extensionId: this._peripheral ? this._peripheral._extensionId : 'no-peripheral',
+      bleType: connector && connector.constructor ? connector.constructor.name : 'none',
+      hasBle: Boolean(connector),
+      isConnected: this.isConnected(),
+      hasNavigatorBluetooth: typeof navigator !== 'undefined' && Boolean(navigator.bluetooth),
+      hasNavigatorSerial: typeof navigator !== 'undefined' && Boolean(navigator.serial)
+    };
+  }
+
+  #safeSerialize(value) {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch {
+      return String(value);
+    }
+  }
+
+  #logDebug(label, detail) {
+    const line = `${new Date().toISOString()} ${label} ${JSON.stringify(this.#safeSerialize(detail))}`;
+    this.lastDebugMessage = line;
+    this.debugHistory.push(line);
+    if (this.debugHistory.length > DEBUG_HISTORY_LIMIT) {
+      this.debugHistory.shift();
+    }
+    console.log(`[GroveWrapper] ${line}`);
+    if (typeof window !== 'undefined') {
+      window.__groveWrapperDebug = [...this.debugHistory];
+    }
   }
 
   static get EXTENSION_NAME() {
