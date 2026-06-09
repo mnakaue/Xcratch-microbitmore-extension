@@ -65,6 +65,8 @@ const SERVO_RANGE = 2000;
 const SERVO_CENTER = 1500;
 const SERVO_MIN_STEP_MS = 50;
 const DEBUG_HISTORY_LIMIT = 12;
+const PULL_NONE = 0;
+const PIN_EVENT_ON_EDGE = 1;
 
 const toPortPin = (table, portName) => table[String(portName)] || '0';
 const clampAngle = angle => Math.max(0, Math.min(180, angle));
@@ -95,6 +97,7 @@ class GroveShieldWrapperBlocks {
   constructor(runtime) {
     this.runtime = runtime;
     this.base = new MicrobitMoreBlocks(runtime);
+    this.microbit = this.base.microbit;
     this._peripheral = this.base._peripheral;
     this._peripheral._extensionId = EXTENSION_ID;
     if (this.runtime && typeof this.runtime.registerPeripheralExtension === 'function') {
@@ -107,6 +110,24 @@ class GroveShieldWrapperBlocks {
       P1: DEFAULT_SERVO_ANGLE,
       P2: DEFAULT_SERVO_ANGLE
     };
+    this.servoMoveTokens = {
+      P0: 0,
+      P1: 0,
+      P2: 0
+    };
+    this.servoActivePorts = new Set();
+    this.ledStates = {
+      P0: false,
+      P1: false,
+      P2: false
+    };
+    this.ledActivePorts = new Set();
+    this.buttonConfigState = {};
+    this.transportQueue = Promise.resolve();
+    this.connectionEpoch = 0;
+    this.lastConnectionState = false;
+    this.#installConnectionHooks();
+    this.#syncConnectionState();
     if (DEBUG_ENABLED) {
       this.#installDebugHooks();
       this.#logDebug('constructor', this.#debugSnapshot());
@@ -330,7 +351,13 @@ class GroveShieldWrapperBlocks {
   }
 
   whenLedButtonPressed(args) {
-    return this.ledButtonPressed(args);
+    const portName = this.#normalizePortName(args.PORT, DUAL_SIGNAL_PORTS);
+    const port = DUAL_SIGNAL_PORTS[portName];
+    this.#ensureLedButtonReady(portName).catch(() => {});
+    return this.base.whenPinEvent({
+      PIN: port.button,
+      EVENT: 'FALL'
+    });
   }
 
   whenButtonEvent(args) {
@@ -354,16 +381,25 @@ class GroveShieldWrapperBlocks {
   }
 
   ledButtonPressed(args) {
-    const port = DUAL_SIGNAL_PORTS[String(args.PORT)] || DUAL_SIGNAL_PORTS.P0;
-    return this.base.isPinHigh({PIN: port.button});
+    const portName = this.#normalizePortName(args.PORT, DUAL_SIGNAL_PORTS);
+    const port = DUAL_SIGNAL_PORTS[portName];
+    this.#ensureLedButtonReady(portName).catch(() => {});
+    if (!this.isConnected()) {
+      return false;
+    }
+    return !this.microbit.isPinHigh(Number(port.button));
   }
 
-  setLedButtonLed(args, util) {
-    const port = DUAL_SIGNAL_PORTS[String(args.PORT)] || DUAL_SIGNAL_PORTS.P0;
-    return this.base.setDigitalOut({
-      PIN: port.led,
-      LEVEL: String(args.STATE) === 'true' ? 'true' : 'false'
-    }, util);
+  async setLedButtonLed(args) {
+    const portName = this.#normalizePortName(args.PORT, DUAL_SIGNAL_PORTS);
+    const state = String(args.STATE) === 'true';
+    const port = DUAL_SIGNAL_PORTS[portName];
+    this.ledStates[portName] = state;
+    this.ledActivePorts.add(portName);
+    await this.#sendTransportCommand(async () => {
+      await this.#waitForTransportReady();
+      return this.microbit.setPinOutput(Number(port.led), state);
+    });
   }
 
   readAnalog(args) {
@@ -416,32 +452,47 @@ class GroveShieldWrapperBlocks {
     return this.base.getAcceleration(args);
   }
 
-  setServoAngle(args, util) {
-    const port = String(args.PORT);
+  async setServoAngle(args) {
+    const port = this.#normalizePortName(args.PORT, SERVO_PORTS);
     const angle = clampAngle(Number(args.ANGLE) || 0);
     this.servoAngles[port] = angle;
-    return this.#setServo(port, angle, util);
+    this.servoActivePorts.add(port);
+    this.servoMoveTokens[port] += 1;
+    await this.#setServo(port, angle);
   }
 
-  async moveServoAngle(args, util) {
-    const port = String(args.PORT);
+  async moveServoAngle(args) {
+    const port = this.#normalizePortName(args.PORT, SERVO_PORTS);
     const targetAngle = clampAngle(Number(args.ANGLE) || 0);
     const seconds = Math.max(0, Number(args.SECONDS) || 0);
     const startAngle = this.servoAngles[port] ?? DEFAULT_SERVO_ANGLE;
+    const moveToken = this.#nextServoMoveToken(port);
+    this.servoActivePorts.add(port);
 
     if (seconds === 0 || startAngle === targetAngle) {
       this.servoAngles[port] = targetAngle;
-      return this.#setServo(port, targetAngle, util);
+      await this.#setServo(port, targetAngle);
+      return;
     }
 
     const durationMs = seconds * 1000;
     const steps = Math.max(1, Math.ceil(durationMs / SERVO_MIN_STEP_MS));
+    const connectionEpoch = this.connectionEpoch;
 
     for (let step = 1; step <= steps; step += 1) {
+      if (!this.isConnected()) {
+        return;
+      }
+      if (this.connectionEpoch !== connectionEpoch) {
+        return;
+      }
+      if (this.servoMoveTokens[port] !== moveToken) {
+        return;
+      }
       const ratio = step / steps;
       const angle = clampAngle(Math.round(startAngle + (targetAngle - startAngle) * ratio));
       this.servoAngles[port] = angle;
-      this.#setServo(port, angle, util);
+      await this.#setServo(port, angle);
       if (step < steps) {
         await sleep(durationMs / steps);
       }
@@ -456,22 +507,147 @@ class GroveShieldWrapperBlocks {
     return this.base.stopTone();
   }
 
-  #setServo(port, angle, util) {
-    return this.base.setServo({
-      PIN: toPortPin(SERVO_PORTS, port),
-      ANGLE: angle,
-      RANGE: SERVO_RANGE,
-      CENTER: SERVO_CENTER
-    }, util);
+  async #setServo(port, angle) {
+    const pin = Number(toPortPin(SERVO_PORTS, port));
+    await this.#sendTransportCommand(async () => {
+      await this.#waitForTransportReady();
+      return this.microbit.setPinServo(pin, angle, SERVO_RANGE, SERVO_CENTER);
+    });
+  }
+
+  #normalizePortName(portName, table) {
+    const name = String(portName);
+    if (table[name]) {
+      return name;
+    }
+    return Object.keys(table)[0];
+  }
+
+  #nextServoMoveToken(port) {
+    this.servoMoveTokens[port] = (this.servoMoveTokens[port] || 0) + 1;
+    return this.servoMoveTokens[port];
+  }
+
+  #ensureLedButtonReady(portName) {
+    if (!this.isConnected()) {
+      return Promise.resolve();
+    }
+    const epoch = this.connectionEpoch;
+    const state = this.buttonConfigState[portName];
+    if (state && state.epoch === epoch) {
+      return state.promise;
+    }
+    const port = DUAL_SIGNAL_PORTS[portName];
+    const promise = this.#sendTransportCommand(async () => {
+      await this.#waitForTransportReady();
+      await this.microbit.setPullMode(Number(port.button), PULL_NONE);
+      await this.#waitForTransportReady();
+      return this.microbit.listenPinEventType(Number(port.button), PIN_EVENT_ON_EDGE);
+    });
+    this.buttonConfigState[portName] = {epoch, promise};
+    return promise.catch(error => {
+      if (this.buttonConfigState[portName] && this.buttonConfigState[portName].epoch === epoch) {
+        delete this.buttonConfigState[portName];
+      }
+      throw error;
+    });
+  }
+
+  async #waitForTransportReady() {
+    while (this.isConnected() && this.microbit && this.microbit.bleBusy) {
+      await sleep(10);
+    }
+  }
+
+  #sendTransportCommand(task) {
+    const epoch = this.connectionEpoch;
+    const run = async () => {
+      if (!this.isConnected() || this.connectionEpoch !== epoch) {
+        return;
+      }
+      return task();
+    };
+    const result = this.transportQueue.then(run, run);
+    this.transportQueue = result.catch(() => {});
+    return result;
+  }
+
+  #installConnectionHooks() {
+    this.#wrapPeripheralMethod('connect', id => ({id, ...this.#debugSnapshot()}));
+    this.#wrapPeripheralMethod('disconnect', () => this.#debugSnapshot());
+    this.#wrapPeripheralMethod('onDisconnect', () => this.#debugSnapshot());
+    this.#installRuntimeConnectionHooks();
+  }
+
+  #installRuntimeConnectionHooks() {
+    if (!this.runtime || typeof this.runtime.on !== 'function') {
+      return;
+    }
+    const eventNames = [
+      'PERIPHERAL_CONNECTED',
+      'PERIPHERAL_DISCONNECTED'
+    ];
+    eventNames.forEach(name => {
+      const eventName = this.runtime.constructor && this.runtime.constructor[name];
+      if (!eventName) return;
+      this.runtime.on(eventName, () => {
+        this.#syncConnectionState();
+      });
+    });
+  }
+
+  #syncConnectionState() {
+    const connected = this.isConnected();
+    if (connected === this.lastConnectionState) {
+      return;
+    }
+    this.lastConnectionState = connected;
+    this.connectionEpoch += 1;
+    this.transportQueue = Promise.resolve();
+    Object.keys(this.servoMoveTokens).forEach(port => {
+      this.servoMoveTokens[port] += 1;
+    });
+    this.buttonConfigState = {};
+    if (connected) {
+      this.#primeGroveState(this.connectionEpoch).catch(error => {
+        if (DEBUG_ENABLED) {
+          this.#logDebug('prime-grove-state-error', {message: String(error)});
+        }
+      });
+    }
+  }
+
+  async #primeGroveState(epoch) {
+    const ports = Object.keys(DUAL_SIGNAL_PORTS);
+    for (const portName of ports) {
+      if (epoch !== this.connectionEpoch || !this.isConnected()) {
+        return;
+      }
+      await this.#ensureLedButtonReady(portName);
+    }
+    for (const portName of this.ledActivePorts) {
+      if (epoch !== this.connectionEpoch || !this.isConnected()) {
+        return;
+      }
+      const port = DUAL_SIGNAL_PORTS[portName];
+      const state = this.ledStates[portName];
+      await this.#sendTransportCommand(async () => {
+        await this.#waitForTransportReady();
+        return this.microbit.setPinOutput(Number(port.led), state);
+      });
+    }
+    for (const portName of this.servoActivePorts) {
+      if (epoch !== this.connectionEpoch || !this.isConnected()) {
+        return;
+      }
+      await this.#setServo(portName, this.servoAngles[portName]);
+    }
   }
 
   #installDebugHooks() {
     this.#wrapPeripheralMethod('scan', () => this.#debugSnapshot());
     this.#wrapPeripheralMethod('scanBLE', () => this.#debugSnapshot());
     this.#wrapPeripheralMethod('scanSerial', () => this.#debugSnapshot());
-    this.#wrapPeripheralMethod('connect', id => ({id, ...this.#debugSnapshot()}));
-    this.#wrapPeripheralMethod('disconnect', () => this.#debugSnapshot());
-    this.#wrapPeripheralMethod('onDisconnect', () => this.#debugSnapshot());
     this.#installRuntimeHooks();
   }
 
@@ -510,16 +686,20 @@ class GroveShieldWrapperBlocks {
     const wrapped = function (...args) {
       self.#logDebug(`${name}-start`, detailFactory ? detailFactory(...args) : args);
       const result = original.apply(this, args);
+      self.#syncConnectionState();
       self.#installBleDebugHooks();
       if (result && typeof result.then === 'function') {
         return result.then(value => {
+          self.#syncConnectionState();
           self.#logDebug(`${name}-resolved`, self.#debugSnapshot());
           return value;
         }).catch(error => {
+          self.#syncConnectionState();
           self.#logDebug(`${name}-error`, {message: String(error), ...self.#debugSnapshot()});
           throw error;
         });
       }
+      self.#syncConnectionState();
       self.#logDebug(`${name}-done`, self.#debugSnapshot());
       return result;
     };
