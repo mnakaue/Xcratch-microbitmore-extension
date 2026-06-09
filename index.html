@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Xcratch Grove Wrapper</title>
+    <style>
+      :root {
+        --bg: #f5f2e8;
+        --paper: #fffdf8;
+        --ink: #21312c;
+        --sub: #617069;
+        --line: #ddd4c1;
+        --accent: #3e8b52;
+        --accent-2: #d97a2b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(217, 122, 43, 0.12), transparent 28%),
+          radial-gradient(circle at right, rgba(62, 139, 82, 0.14), transparent 24%),
+          linear-gradient(180deg, #f8f5ec 0%, var(--bg) 100%);
+      }
+
+      main {
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 48px 20px 80px;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: clamp(2rem, 4vw, 3.4rem);
+        line-height: 1.08;
+      }
+
+      p, li {
+        line-height: 1.8;
+      }
+
+      .lead {
+        max-width: 760px;
+        color: var(--sub);
+      }
+
+      .grid {
+        display: grid;
+        gap: 18px;
+        margin-top: 28px;
+      }
+
+      .card {
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 22px;
+        box-shadow: 0 16px 32px rgba(33, 49, 44, 0.06);
+      }
+
+      pre,
+      code {
+        font-family: "SFMono-Regular", "Menlo", monospace;
+      }
+
+      pre {
+        overflow-x: auto;
+        padding: 14px;
+        border-radius: 12px;
+        background: #f3f8f3;
+        border: 1px solid #d7e5d9;
+      }
+
+      a {
+        color: var(--accent);
+      }
+
+      .badge {
+        display: inline-block;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: rgba(217, 122, 43, 0.12);
+        color: #915118;
+        font-size: 0.9rem;
+      }
+
+      ul,
+      ol {
+        padding-left: 1.4rem;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <span class="badge">Xcratch MOD Extension</span>
+      <h1>Grove Wrapper for micro:bit</h1>
+      <p class="lead">
+        Grove Shield for micro:bit で使う Grove モジュール向けに、
+        <code>microbitMore</code> の機能を分かりやすいブロック名で包むための拡張です。
+        読み込みURLは <code>dist/groveShieldWrapper.mjs</code> です。
+      </p>
+
+      <div class="grid">
+        <section class="card">
+          <h2>読み込みURL</h2>
+          <pre><code>https://mnakaue.github.io/Xcratch-microbitmore-extension/dist/groveShieldWrapper.mjs</code></pre>
+        </section>
+
+        <section class="card">
+          <h2>Xcratch での使い方</h2>
+          <ol>
+            <li>Xcratch Editor を開く</li>
+            <li>「拡張機能を追加」を押す</li>
+            <li><code>Extension Loader</code> を選ぶ</li>
+            <li>上の URL を入力する</li>
+            <li>Grove Wrapper のブロックを使う</li>
+          </ol>
+        </section>
+
+        <section class="card">
+          <h2>備考</h2>
+          <ul>
+            <li>この拡張は <code>microbitMore</code> を土台にしています</li>
+            <li>最初の版は、Digital / Analog / Servo の基本ラッパーから始めています</li>
+            <li>I2C や UART の Grove モジュールは、個別に実装可否を確認して追加します</li>
+            <li><code>xcratch.github.io</code> から <code>localhost</code> を直接読む確認は、ブラウザ制限で失敗します</li>
+          </ul>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>
