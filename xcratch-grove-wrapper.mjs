@@ -83,6 +83,8 @@ class GroveShieldWrapperBlocks {
       P1: DEFAULT_SERVO_ANGLE,
       P2: DEFAULT_SERVO_ANGLE
     };
+    this.prevButtonStates = {};
+    this.prevLedButtonStates = {};
     if (DEBUG_ENABLED) {
       this.#installDebugHooks();
       this.#logDebug('constructor', this.#debugSnapshot());
@@ -318,11 +320,19 @@ class GroveShieldWrapperBlocks {
   }
 
   whenButtonPressed(args) {
-    return this.buttonPressed(args);
+    const port = String(args.PORT);
+    const pressed = this.buttonPressed(args);
+    const prevPressed = this.prevButtonStates[port];
+    this.#queueButtonStateUpdate();
+    return pressed && !prevPressed;
   }
 
   whenLedButtonPressed(args) {
-    return this.ledButtonPressed(args);
+    const port = String(args.PORT);
+    const pressed = this.ledButtonPressed(args);
+    const prevPressed = this.prevLedButtonStates[port];
+    this.#queueLedButtonStateUpdate();
+    return pressed && !prevPressed;
   }
 
   ledButtonPressed(args) {
@@ -383,6 +393,38 @@ class GroveShieldWrapperBlocks {
       RANGE: SERVO_RANGE,
       CENTER: SERVO_CENTER
     });
+  }
+
+  #queueButtonStateUpdate() {
+    if (this.updateButtonStateTimer) return;
+    this.updateButtonStateTimer = setTimeout(() => {
+      this.prevButtonStates = this.#readButtonStates();
+      this.updateButtonStateTimer = null;
+    }, this.runtime.currentStepTime);
+  }
+
+  #queueLedButtonStateUpdate() {
+    if (this.updateLedButtonStateTimer) return;
+    this.updateLedButtonStateTimer = setTimeout(() => {
+      this.prevLedButtonStates = this.#readLedButtonStates();
+      this.updateLedButtonStateTimer = null;
+    }, this.runtime.currentStepTime);
+  }
+
+  #readButtonStates() {
+    const states = {};
+    Object.keys(DIGITAL_PORTS).forEach(port => {
+      states[port] = this.base.isPinHigh({PIN: DIGITAL_PORTS[port]});
+    });
+    return states;
+  }
+
+  #readLedButtonStates() {
+    const states = {};
+    Object.entries(DUAL_SIGNAL_PORTS).forEach(([port, pins]) => {
+      states[port] = !this.base.isPinHigh({PIN: pins.button});
+    });
+    return states;
   }
 
   #installDebugHooks() {
