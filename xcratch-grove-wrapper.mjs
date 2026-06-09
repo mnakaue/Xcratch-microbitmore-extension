@@ -29,7 +29,14 @@ const SERVO_PORTS = {
   P2: '2'
 };
 
+const DEFAULT_SERVO_ANGLE = 90;
+const SERVO_RANGE = 2000;
+const SERVO_CENTER = 1500;
+const SERVO_MIN_STEP_MS = 50;
+
 const toPortPin = (table, portName) => table[String(portName)] || '0';
+const clampAngle = angle => Math.max(0, Math.min(180, angle));
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 const entry = {
   name: EXTENSION_NAME,
@@ -55,6 +62,11 @@ class GroveShieldWrapperBlocks {
   constructor(runtime) {
     this.runtime = runtime;
     this.base = new MicrobitMoreBlocks(runtime);
+    this.servoAngles = {
+      P0: DEFAULT_SERVO_ANGLE,
+      P1: DEFAULT_SERVO_ANGLE,
+      P2: DEFAULT_SERVO_ANGLE
+    };
   }
 
   getInfo() {
@@ -127,6 +139,26 @@ class GroveShieldWrapperBlocks {
               defaultValue: 90
             }
           }
+        },
+        {
+          opcode: 'moveServoAngle',
+          blockType: 'command',
+          text: 'Grove サーボを [PORT] で [SECONDS] 秒かけて [ANGLE] 度にする',
+          arguments: {
+            PORT: {
+              type: 'string',
+              menu: 'servoPorts',
+              defaultValue: 'P2'
+            },
+            SECONDS: {
+              type: 'number',
+              defaultValue: 1
+            },
+            ANGLE: {
+              type: 'number',
+              defaultValue: 90
+            }
+          }
         }
       ],
       menus: {
@@ -177,11 +209,43 @@ class GroveShieldWrapperBlocks {
   }
 
   setServoAngle(args) {
+    const port = String(args.PORT);
+    const angle = clampAngle(Number(args.ANGLE) || 0);
+    this.servoAngles[port] = angle;
+    return this.#setServo(port, angle);
+  }
+
+  async moveServoAngle(args) {
+    const port = String(args.PORT);
+    const targetAngle = clampAngle(Number(args.ANGLE) || 0);
+    const seconds = Math.max(0, Number(args.SECONDS) || 0);
+    const startAngle = this.servoAngles[port] ?? DEFAULT_SERVO_ANGLE;
+
+    if (seconds === 0 || startAngle === targetAngle) {
+      this.servoAngles[port] = targetAngle;
+      return this.#setServo(port, targetAngle);
+    }
+
+    const durationMs = seconds * 1000;
+    const steps = Math.max(1, Math.ceil(durationMs / SERVO_MIN_STEP_MS));
+
+    for (let step = 1; step <= steps; step += 1) {
+      const ratio = step / steps;
+      const angle = clampAngle(Math.round(startAngle + (targetAngle - startAngle) * ratio));
+      this.servoAngles[port] = angle;
+      this.#setServo(port, angle);
+      if (step < steps) {
+        await sleep(durationMs / steps);
+      }
+    }
+  }
+
+  #setServo(port, angle) {
     return this.base.setServo({
-      PIN: toPortPin(SERVO_PORTS, args.PORT),
-      ANGLE: Number(args.ANGLE) || 0,
-      RANGE: 2000,
-      CENTER: 1500
+      PIN: toPortPin(SERVO_PORTS, port),
+      ANGLE: angle,
+      RANGE: SERVO_RANGE,
+      CENTER: SERVO_CENTER
     });
   }
 

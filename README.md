@@ -21,6 +21,7 @@ https://mnakaue.github.io/Xcratch-microbitmore-extension/dist/groveShieldWrapper
 
 - `microbitMore` を土台にしたラッパー拡張です
 - 今の最小雛形は、Grove の基本入力/出力を分かりやすい名前で包むための土台です
+- サーボは `角度だけ` と `何秒かけて動かす` の 2 種類を用意しています
 - 本格的なモジュール別ブロックは今後追加します
 - `https://xcratch.github.io` から `http://localhost` や `http://[::1]` を直接読むと、ブラウザの Private Network Access 制限で失敗します
 - そのため、実運用と確認は GitHub Pages などの公開 URL で行います
